@@ -1,12 +1,16 @@
 ﻿using System;
+using System.Threading.Tasks;
 
-namespace dBot
+namespace DBot
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
+        => new Program().StartAsync().GetAwaiter().GetResult();
+
+        public async Task StartAsync()
         {
-            Console.WriteLine("Hello World!");
+            await new DBot.Source.DBot().RunAndBlockAsync();
         }
     }
 }
