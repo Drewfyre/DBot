@@ -141,10 +141,18 @@ namespace DBot.Source
                     await (user as IGuildUser).RemoveRoleAsync(Role);
                 }
             }
+
+            Rc._DbService.Conn.Close();
         }
 
         private async Task _SocketClient_ReactionAdded(Discord.Cacheable<Discord.IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
         {
+            if(arg3.UserId == this._Client.CurrentUser.Id
+                || arg3.User.Value.IsBot == true)
+            {
+                return;
+            }
+
             ulong MainMsgID = arg3.MessageId;
             ReactionRoleCommands Rc = new ReactionRoleCommands(this._Client);
 
@@ -168,6 +176,8 @@ namespace DBot.Source
                     await (user as IGuildUser).AddRoleAsync(Role);
                 }
             }
+
+            Rc._DbService.Conn.Close();
         }
     }
 }

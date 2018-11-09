@@ -4,6 +4,7 @@ using Discord.WebSocket;
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -47,12 +48,15 @@ namespace DBot.Source.Modules.ReactionRoles
             if (Params.Length <= 0)
                 return;
 
-            string Message = string.Join(" ", Params);
+            System.Drawing.Color c = (System.Drawing.Color)(new ColorConverter().ConvertFromString(Params[0]));
+
+            string Message = string.Join(" ", Params.Skip(1));
             
             await Context.Message.DeleteAsync();
 
             var Eb = new EmbedBuilder();
             Eb.WithDescription(Message);
+            Eb.WithColor(c.R, c.G, c.B);
             var Answer = await Context.Channel.SendMessageAsync("", false, Eb.Build());
             this.ReactionMessages.Add((long)Answer.Id);
 
@@ -118,6 +122,7 @@ namespace DBot.Source.Modules.ReactionRoles
             this._DbService.Conn.Close();
 
             await Context.Message.DeleteAsync();
+            await (MainMsg as SocketUserMessage).AddReactionAsync(new Emoji(Params[0]));
         }
     }
 }
