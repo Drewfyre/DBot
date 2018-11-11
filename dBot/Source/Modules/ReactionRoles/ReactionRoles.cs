@@ -18,12 +18,15 @@ namespace DBot.Source.Modules.ReactionRoles
 
         public ReactionRolesService(DiscordSocketClient Client)
         {
-            this._SocketClient = Client;
+            /*this._SocketClient = Client;
             this._SocketClient.ReactionAdded += _SocketClient_ReactionAdded;
             this._SocketClient.ReactionRemoved += _SocketClient_ReactionRemoved;
 
-            this._DbService = new DbService();
-            this._DbService.Conn.Open();
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
+            {
+
+                conn.Open();
+            }
             SQLiteCommand Cmd = new SQLiteCommand("SELECT * FROM reaction_messages", this._DbService.Conn);
             SQLiteDataReader Reader = Cmd.ExecuteReader();
             this._DbService.Conn.Close();
@@ -44,7 +47,7 @@ namespace DBot.Source.Modules.ReactionRoles
                 }
 
                 this.Reactions.Add(MessageID, ReactionRoles);
-            }
+            }*/
         }
 
         private async Task _SocketClient_ReactionRemoved(Discord.Cacheable<Discord.IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)

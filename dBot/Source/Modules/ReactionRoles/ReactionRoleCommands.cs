@@ -1,5 +1,6 @@
 ﻿using Discord;
 using Discord.Commands;
+using Discord.Rest;
 using Discord.WebSocket;
 using System;
 using System.Collections.Generic;
@@ -15,7 +16,6 @@ namespace DBot.Source.Modules.ReactionRoles
     public class ReactionRoleCommands : DModuleBase
     {
         private readonly DiscordSocketClient _SocketClient;
-        public readonly DbService _DbService;
 
         private List<long> ReactionMessages;
 
@@ -23,19 +23,22 @@ namespace DBot.Source.Modules.ReactionRoles
         {
             this._SocketClient = Client;
 
-            this._DbService = new DbService();
-            this._DbService.Conn.Open();
-            SQLiteCommand Cmd = new SQLiteCommand("SELECT * FROM reaction_messages", this._DbService.Conn);
-            SQLiteDataReader Reader = Cmd.ExecuteReader();
-
-            this.ReactionMessages = new List<long>();
-
-            while (Reader.Read())
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
             {
-                this.ReactionMessages.Add(Reader.GetInt64(0));
+                conn.Open();
+                SQLiteCommand Cmd = new SQLiteCommand("SELECT * FROM reaction_messages", conn);
+                SQLiteDataReader Reader = Cmd.ExecuteReader();
+
+                this.ReactionMessages = new List<long>();
+
+                while (Reader.Read())
+                {
+                    this.ReactionMessages.Add(Reader.GetInt64(0));
+                }
+
+                conn.Close();
             }
 
-            this._DbService.Conn.Close();
         }
 
         [Command("add_reaction_msg")]
@@ -51,7 +54,7 @@ namespace DBot.Source.Modules.ReactionRoles
             System.Drawing.Color c = (System.Drawing.Color)(new ColorConverter().ConvertFromString(Params[0]));
 
             string Message = string.Join(" ", Params.Skip(1));
-            
+
             await Context.Message.DeleteAsync();
 
             var Eb = new EmbedBuilder();
@@ -60,11 +63,16 @@ namespace DBot.Source.Modules.ReactionRoles
             var Answer = await Context.Channel.SendMessageAsync("", false, Eb.Build());
             this.ReactionMessages.Add((long)Answer.Id);
 
-            this._DbService.Conn.Open();
-            string SQL = $@"INSERT INTO reaction_messages (message, messageID, DOEOM) VALUES ('{Message}', {(long)Answer.Id}, {Support.UnixTimeStamp()})";
-            SQLiteCommand Cmd = new SQLiteCommand(SQL, this._DbService.Conn);
-            Cmd.ExecuteNonQuery();
-            this._DbService.Conn.Close();
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
+            {
+
+                conn.Open();
+                string SQL = $@"INSERT INTO reaction_messages (message, messageID, DOEOM) VALUES ('{Message}', {(long)Answer.Id}, {Support.UnixTimeStamp()})";
+                SQLiteCommand Cmd = new SQLiteCommand(SQL, conn);
+                Cmd.ExecuteNonQuery();
+                Cmd.Dispose();
+                conn.Close();
+            }
         }
 
         [Command("add_reaction_role")]
@@ -77,15 +85,62 @@ namespace DBot.Source.Modules.ReactionRoles
                 return;
 
             string Role = string.Join(" ", Params.Skip(2));
+            string[] CustomeReaction = Params[0].Replace("<:", "").Replace(">", "").Split(":");
 
-            if(!Context.Guild.Roles.Any(R => R.Name == Role))
+            if (!Context.Guild.Roles.Any(R => R.Name == Role))
             {
                 await Context.Channel.SendMessageAsync($"The role <{Role}> doesn't exist. Please specify a correct role.");
                 await Context.Message.DeleteAsync();
                 return;
             }
 
-            var MainMsg = await Context.Channel.GetMessageAsync(ulong.Parse(Params[1]));
+            IMessage MainMsg = await Context.Channel.GetMessageAsync(ulong.Parse(Params[1]));
+            string foo = MainMsg.GetType().ToString();
+
+            try
+            {
+                SocketUserMessage SocketMsg = (SocketUserMessage)await Context.Channel.GetMessageAsync(ulong.Parse(Params[1]));
+
+                IEmote e;
+
+                if (Params[0].StartsWith('<'))
+                {
+                    e = Context.Guild.Emotes.FirstOrDefault(E => E.Name == CustomeReaction[0] && E.Id.ToString() == CustomeReaction[1]);
+                }
+                else
+                {
+                    e = new Emoji(Params[0]);
+                }
+
+                await ((SocketUserMessage)SocketMsg).AddReactionAsync(e);
+            }
+            catch (Exception exc)
+            {
+                try
+                {
+                    RestUserMessage RestMsg = (RestUserMessage)await Context.Channel.GetMessageAsync(ulong.Parse(Params[1]));
+
+
+                    IEmote e;
+
+                    if (Params[0].StartsWith('<'))
+                    {
+                        e = Context.Guild.Emotes.FirstOrDefault(E => E.Name == CustomeReaction[0] && E.Id.ToString() == CustomeReaction[1]);
+                    }
+                    else
+                    {
+                        e = new Emoji(Params[0]);
+                    }
+
+                    await ((RestUserMessage)RestMsg).AddReactionAsync(e);
+                }
+                catch (Exception)
+                {
+                    Support.Log($"Could not add reaction <{Params[0]}> to base message <{Params[1]}>");
+                    return;
+                }
+            }
+
 
             if (MainMsg == null)
             {
@@ -93,36 +148,55 @@ namespace DBot.Source.Modules.ReactionRoles
                 await Context.Message.DeleteAsync();
                 return;
             }
-
-            this._DbService.Conn.Open();
-            string SQL = $@"SELECT rID FROM reactions WHERE gID = {Context.Guild.Id} AND reaction_text = '{Params[0]}'";
-            SQLiteCommand Cmd = new SQLiteCommand(SQL, this._DbService.Conn);
-            SQLiteDataReader Reader = Cmd.ExecuteReader();
-
+            
             long rID = 0;
 
-            if(Reader.HasRows)
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
             {
-                Reader.Read();
-                rID = Reader.GetInt64(0);
-            }
-            else
-            {
-                SQL = $@"INSERT INTO reactions (reaction_text, gID) VALUES('{Params[0]}', {Context.Guild.Id});";
-                Cmd = new SQLiteCommand(SQL, this._DbService.Conn);
-                Cmd.ExecuteNonQuery();
-                SQL = @"select last_insert_rowid()";
-                Cmd = new SQLiteCommand(SQL, this._DbService.Conn);
-                rID = (long)Cmd.ExecuteScalar();
+
+                conn.Open();
+                string SQL = $@"SELECT rID FROM reactions WHERE gID = {Context.Guild.Id} AND reaction_text = '{Params[0]}'";
+                SQLiteCommand Cmd = new SQLiteCommand(SQL, conn);
+                SQLiteDataReader Reader = Cmd.ExecuteReader();
+
+
+                if (Reader.HasRows)
+                {
+                    Reader.Read();
+                    rID = Reader.GetInt64(0);
+                    Reader.Close();
+                    Reader = null;
+                    Cmd.Dispose();
+                }
+                else
+                {
+                    Cmd.Dispose();
+                    SQL = $@"INSERT INTO reactions (reaction_text, gID) VALUES('{Params[0]}', {Context.Guild.Id});";
+                    SQLiteCommand Cmd2 = new SQLiteCommand(SQL, conn);
+                    Cmd2.ExecuteNonQuery();
+                    Cmd2.Dispose();
+                    SQL = @"select last_insert_rowid()";
+                    SQLiteCommand Cmd3 = new SQLiteCommand(SQL, conn);
+                    rID = (long)Cmd3.ExecuteScalar();
+                    Cmd3.Dispose();
+                }
+
+                Cmd.Dispose();
+                conn.Close();
             }
 
-            SQL = $@"INSERT INTO reaction_roles (rmID, rID, [role], DOEOM) SELECT rm.rmID, {rID}, '{Role}', {Support.UnixTimeStamp()} FROM reaction_messages rm WHERE rm.messageID = {Params[1]}";
-            Cmd = new SQLiteCommand(SQL, this._DbService.Conn);
-            Cmd.ExecuteNonQuery();
-            this._DbService.Conn.Close();
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
+            {
+                conn.Open();
+                
+                string SQL = $@"INSERT INTO reaction_roles (rmID, rID, [role], DOEOM) SELECT rm.rmID, {rID}, '{Role}', {Support.UnixTimeStamp()} FROM reaction_messages rm WHERE rm.messageID = {Params[1]}";
+                SQLiteCommand Cmd = new SQLiteCommand(SQL, conn);
+                Cmd.ExecuteNonQuery();
+                Cmd.Dispose();
+                conn.Close();
+            }
 
             await Context.Message.DeleteAsync();
-            await (MainMsg as SocketUserMessage).AddReactionAsync(new Emoji(Params[0]));
         }
     }
 }

@@ -94,7 +94,7 @@ namespace DBot.Source
                 var context = new SocketCommandContext(this._Client, message);
 
                 var result = await this._CommandService.ExecuteAsync(context, argPos, this._ServiceProvider);
-                
+
 
                 if (!result.IsSuccess)
                     Console.WriteLine(result.ErrorReason);
@@ -120,64 +120,102 @@ namespace DBot.Source
         {
             ulong MainMsgID = arg3.MessageId;
             ReactionRoleCommands Rc = new ReactionRoleCommands(this._Client);
+            string SQL = "";
 
-            string SQL = $@"select [role] FROM reaction_roles 
+            switch (arg3.Emote.GetType().ToString())
+            {
+                case "Discord.Emoji":
+                    SQL = $@"select [role] FROM reaction_roles 
                             WHERE rmID = (SELECT rmID FROM reaction_messages WHERE messageID = {MainMsgID})
                             AND rID = (SELECT rID FROM reactions WHERE reaction_text = '{arg3.Emote.Name}')";
-            SQLiteCommand Cmd = new SQLiteCommand(SQL, Rc._DbService.Conn);
-            Rc._DbService.Conn.Open();
-            SQLiteDataReader Reader = Cmd.ExecuteReader();
-
-            if (Reader.HasRows)
-            {
-                Reader.Read();
-
-                var Chann = arg3.Channel as SocketGuildChannel;
-                var Guild = Chann.Guild;
-                var Role = Guild.Roles.FirstOrDefault(x => x.Name == Reader.GetString(0));
-                if (Role != default(SocketRole))
-                {
-                    var user = arg3.User.Value;
-                    await (user as IGuildUser).RemoveRoleAsync(Role);
-                }
+                    break;
+                case "Discord.Emote":
+                    SQL = $@"select [role] FROM reaction_roles 
+                            WHERE rmID = (SELECT rmID FROM reaction_messages WHERE messageID = {MainMsgID})
+                            AND rID = (SELECT rID FROM reactions WHERE reaction_text = '<:{(arg3.Emote as Emote).Name}:{(arg3.Emote as Emote).Id}>')";
+                    break;
             }
 
-            Rc._DbService.Conn.Close();
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
+            {
+
+                conn.Open();
+                SQLiteCommand Cmd = new SQLiteCommand(SQL, conn);
+                SQLiteDataReader Reader = Cmd.ExecuteReader();
+
+                if (Reader.HasRows)
+                {
+                    Reader.Read();
+
+                    var Chann = arg3.Channel as SocketGuildChannel;
+                    var Guild = Chann.Guild;
+                    var Role = Guild.Roles.FirstOrDefault(x => x.Name == Reader.GetString(0));
+                    if (Role != default(SocketRole))
+                    {
+                        var user = arg3.User.Value;
+                        await (user as IGuildUser).RemoveRoleAsync(Role);
+                    }
+                }
+
+                Reader.Close();
+                Cmd.Dispose();
+                conn.Close();
+            }
         }
 
         private async Task _SocketClient_ReactionAdded(Discord.Cacheable<Discord.IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
         {
-            if(arg3.UserId == this._Client.CurrentUser.Id
+            if (arg3.UserId == this._Client.CurrentUser.Id
                 || arg3.User.Value.IsBot == true)
             {
                 return;
             }
-
+            
             ulong MainMsgID = arg3.MessageId;
             ReactionRoleCommands Rc = new ReactionRoleCommands(this._Client);
 
-            string SQL = $@"select [role] FROM reaction_roles 
+            string SQL = "";
+
+            switch (arg3.Emote.GetType().ToString())
+            {
+                case "Discord.Emoji":
+                    SQL = $@"select [role] FROM reaction_roles 
                             WHERE rmID = (SELECT rmID FROM reaction_messages WHERE messageID = {MainMsgID})
                             AND rID = (SELECT rID FROM reactions WHERE reaction_text = '{arg3.Emote.Name}')";
-            SQLiteCommand Cmd = new SQLiteCommand(SQL, Rc._DbService.Conn);
-            Rc._DbService.Conn.Open();
-            SQLiteDataReader Reader = Cmd.ExecuteReader();
-
-            if (Reader.HasRows)
-            {
-                Reader.Read();
-
-                var Chann = arg3.Channel as SocketGuildChannel;
-                var Guild = Chann.Guild;
-                var Role = Guild.Roles.FirstOrDefault(x => x.Name == Reader.GetString(0));
-                if (Role != default(SocketRole))
-                {
-                    var user = arg3.User.Value;
-                    await (user as IGuildUser).AddRoleAsync(Role);
-                }
+                    break;
+                case "Discord.Emote":
+                    SQL = $@"select [role] FROM reaction_roles 
+                            WHERE rmID = (SELECT rmID FROM reaction_messages WHERE messageID = {MainMsgID})
+                            AND rID = (SELECT rID FROM reactions WHERE reaction_text = '<:{(arg3.Emote as Emote).Name}:{(arg3.Emote as Emote).Id}>')";
+                    break;
             }
 
-            Rc._DbService.Conn.Close();
+            using (SQLiteConnection conn = new SQLiteConnection(Support.DbConnectionString))
+            {
+                conn.Open();
+                SQLiteCommand Cmd = new SQLiteCommand(SQL, conn);
+                SQLiteDataReader Reader = Cmd.ExecuteReader();
+
+                if (Reader.HasRows)
+                {
+                    Reader.Read();
+
+                    var Chann = arg3.Channel as SocketGuildChannel;
+                    var Guild = Chann.Guild;
+                    var Role = Guild.Roles.FirstOrDefault(x => x.Name == Reader.GetString(0));
+                    if (Role != default(SocketRole))
+                    {
+                        var user = arg3.User.Value;
+                        await (user as IGuildUser).AddRoleAsync(Role);
+                    }
+                }
+
+                Reader.Close();
+                Cmd.Dispose();
+                conn.Close();
+            }
+
+
         }
     }
 }
