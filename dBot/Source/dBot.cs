@@ -66,6 +66,7 @@ namespace DBot.Source
             Support.Log($"Logging in as: {this._Credentials.ClientID}...");
             await this._Client.LoginAsync(TokenType.Bot, this._Credentials.Token).ConfigureAwait(false);
             await this._Client.StartAsync().ConfigureAwait(false);
+            await this._Client.SetStatusAsync(UserStatus.Invisible);
 
             Support.Log("Successfully logged in!");
             this._Client.JoinedGuild += Client_JoinedGuild;
